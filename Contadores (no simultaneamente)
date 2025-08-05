@@ -1,0 +1,186 @@
+//CONTADOR CON BOTONES
+#include <Arduino.h>
+#include <stdint.h>
+
+
+#define LED_5 27
+#define LED_6 14
+#define LED_7 12
+#define LED_8 13 
+
+
+// Pines de los LEDs
+#define LED_a 16
+#define LED_b 4
+#define LED_az 2
+#define LED_r 15
+
+// Pines de los botones
+#define BTN1 18
+#define BTN2 21  
+
+
+volatile int contador = 0; 
+portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED; // la proteccion
+
+// antirebote con volatile para indicarle que la varialbe puede cambiar en cualquier momento
+volatile unsigned long ultimaInterrupcion1 = 0;
+volatile unsigned long ultimaInterrupcion2 = 0;
+const unsigned long rebote_ms = 200;
+
+// ISR para botón de avance
+void IRAM_ATTR aumentar() {
+  unsigned long tiempo = millis();
+  if (tiempo - ultimaInterrupcion1 > rebote_ms) {
+    portENTER_CRITICAL_ISR(&mux); //desactivamos la ISR por un tiempo
+    contador = (contador + 1) % 16;
+    portEXIT_CRITICAL_ISR(&mux); //volvemos a activar la ISR
+    ultimaInterrupcion1 = tiempo;
+  }
+}
+
+// ISR para botón de retroceso
+void IRAM_ATTR disminuir() {
+  unsigned long tiempo = millis();
+  if (tiempo - ultimaInterrupcion2 > rebote_ms) {
+    portENTER_CRITICAL_ISR(&mux); //desactivamos la ISR por un tiempo
+    contador = (contador - 1 + 16) % 16;
+    portEXIT_CRITICAL_ISR(&mux); //volvemos a activar la ISR
+    ultimaInterrupcion2 = tiempo;
+  }
+}
+
+// funcion que tiene el numero binario y lo enciende a leds
+void mostrarBinario(int numero) {
+  // Apagar todos los LEDs primero
+  digitalWrite(LED_a, LOW);
+  digitalWrite(LED_b, LOW);
+  digitalWrite(LED_az, LOW);
+  digitalWrite(LED_r, LOW);
+
+  // mostrar el numero
+  switch (numero) {
+    case 0: break;
+    case 1: digitalWrite(LED_a, HIGH); break;
+    case 2: digitalWrite(LED_b, HIGH); break;
+    case 3: digitalWrite(LED_a, HIGH); digitalWrite(LED_b, HIGH); break;
+    case 4: digitalWrite(LED_az, HIGH); break;
+    case 5: digitalWrite(LED_a, HIGH); digitalWrite(LED_az, HIGH); break;
+    case 6: digitalWrite(LED_b, HIGH); digitalWrite(LED_az, HIGH); break;
+    case 7: digitalWrite(LED_a, HIGH); digitalWrite(LED_b, HIGH); digitalWrite(LED_az, HIGH); break;
+    case 8: digitalWrite(LED_r, HIGH); break;
+    case 9: digitalWrite(LED_a, HIGH); digitalWrite(LED_r, HIGH); break;
+    case 10: digitalWrite(LED_b, HIGH); digitalWrite(LED_r, HIGH); break;
+    case 11: digitalWrite(LED_a, HIGH); digitalWrite(LED_b, HIGH); digitalWrite(LED_r, HIGH); break;
+    case 12: digitalWrite(LED_az, HIGH); digitalWrite(LED_r, HIGH); break;
+    case 13: digitalWrite(LED_a, HIGH); digitalWrite(LED_az, HIGH); digitalWrite(LED_r, HIGH); break;
+    case 14: digitalWrite(LED_b, HIGH); digitalWrite(LED_az, HIGH); digitalWrite(LED_r, HIGH); break;
+    case 15: digitalWrite(LED_a, HIGH); digitalWrite(LED_b, HIGH); digitalWrite(LED_az, HIGH); digitalWrite(LED_r, HIGH); break;
+    default: break;
+  }
+}
+void setup() {
+  // LEDs como salida
+  pinMode(LED_a, OUTPUT);
+  pinMode(LED_b, OUTPUT);
+  pinMode(LED_az, OUTPUT);
+  pinMode(LED_r, OUTPUT);
+
+  // input porque son con resistencias
+  pinMode(BTN1, INPUT);
+  pinMode(BTN2, INPUT);
+
+  // interrupciones activadas por flanco de bajada
+  attachInterrupt(BTN1, aumentar, FALLING); //porque la señal baja de HIGH a LOW
+  attachInterrupt(BTN2, disminuir, FALLING);
+}
+
+void loop() {
+
+  portENTER_CRITICAL(&mux); //desactivamos la ISR por un tiempo
+  int valor = contador;
+  portEXIT_CRITICAL(&mux); //volvemos a activar la ISR
+
+  mostrarBinario(valor);
+  delay(10);
+}
+
+
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//CONTADOR AUTOMATICO
+#include <Arduino.h>
+#include <stdint.h>
+
+
+// Pines de los LEDs
+#define LED_a 27
+#define LED_b 14
+#define LED_az 12
+#define LED_r 13
+
+// Variables globales
+volatile int contador = 0;  
+portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
+hw_timer_t *timer = NULL;//instale el timer
+
+// ISR del temporizador
+void IRAM_ATTR onTimer() {
+  portENTER_CRITICAL_ISR(&mux);//desactivamos la ISR
+  contador = (contador + 1) % 16; 
+  portEXIT_CRITICAL_ISR(&mux);//activamos la ISR
+}
+
+// Mostrar número binario en LEDs
+void mostrarBinario(int numero) {
+  // Apagar todos los LEDs primero
+  digitalWrite(LED_a, LOW);
+  digitalWrite(LED_b, LOW);
+  digitalWrite(LED_az, LOW);
+  digitalWrite(LED_r, LOW);
+
+  // mostrar el numero
+  switch (numero) {
+    case 0: break;
+    case 1: digitalWrite(LED_a, HIGH); break;
+    case 2: digitalWrite(LED_b, HIGH); break;
+    case 3: digitalWrite(LED_a, HIGH); digitalWrite(LED_b, HIGH); break;
+    case 4: digitalWrite(LED_az, HIGH); break;
+    case 5: digitalWrite(LED_a, HIGH); digitalWrite(LED_az, HIGH); break;
+    case 6: digitalWrite(LED_b, HIGH); digitalWrite(LED_az, HIGH); break;
+    case 7: digitalWrite(LED_a, HIGH); digitalWrite(LED_b, HIGH); digitalWrite(LED_az, HIGH); break;
+    case 8: digitalWrite(LED_r, HIGH); break;
+    case 9: digitalWrite(LED_a, HIGH); digitalWrite(LED_r, HIGH); break;
+    case 10: digitalWrite(LED_b, HIGH); digitalWrite(LED_r, HIGH); break;
+    case 11: digitalWrite(LED_a, HIGH); digitalWrite(LED_b, HIGH); digitalWrite(LED_r, HIGH); break;
+    case 12: digitalWrite(LED_az, HIGH); digitalWrite(LED_r, HIGH); break;
+    case 13: digitalWrite(LED_a, HIGH); digitalWrite(LED_az, HIGH); digitalWrite(LED_r, HIGH); break;
+    case 14: digitalWrite(LED_b, HIGH); digitalWrite(LED_az, HIGH); digitalWrite(LED_r, HIGH); break;
+    case 15: digitalWrite(LED_a, HIGH); digitalWrite(LED_b, HIGH); digitalWrite(LED_az, HIGH); digitalWrite(LED_r, HIGH); break;
+    default: break;
+  }
+}
+void setup() {
+  // pines
+  pinMode(LED_a, OUTPUT);
+  pinMode(LED_b, OUTPUT);
+  pinMode(LED_az, OUTPUT);
+  pinMode(LED_r, OUTPUT);
+
+  // 
+  timer = timerBegin(0, 80, true);
+  timerAttachInterrupt(timer, &onTimer, true);
+  timerAlarmWrite(timer, 250000, true); 
+  timerAlarmEnable(timer);
+}
+
+void loop() {
+  // Mostrar el valor actual del contador
+  portENTER_CRITICAL(&mux);//desactivamos la ISR
+  int valor = contador;
+  portEXIT_CRITICAL(&mux);//activamos la ISR
+
+  mostrarBinario(valor);
+  delay(10);  
+}
