@@ -1,0 +1,161 @@
+#include <Arduino.h>
+#include <stdint.h>
+
+// pines LEDs contador manual con botones
+#define LED_a_m 16
+#define LED_b_m 4
+#define LED_az_m 2
+#define LED_r_m 15
+
+// pines LEDs contador automatico
+#define LED_a_a 27
+#define LED_b_a 14
+#define LED_az_a 12
+#define LED_r_a 13
+
+// LED de la alarma
+#define LED_alarma 26
+
+// pines botones
+#define BTN1 18
+#define BTN2 21
+
+// variables globales
+volatile int contadorManual = 0;
+volatile int contadorAuto = 0;
+bool estadoAlarma = false;
+
+//la proteccion
+portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
+
+// antirebotes con volatile para indicarle que la varialbe puede cambiar en cualquier momento
+volatile unsigned long ultimaInterrupcion1 = 0;
+volatile unsigned long ultimaInterrupcion2 = 0;
+const unsigned long rebote_ms = 200;
+
+// Timer
+hw_timer_t *timer = NULL;
+
+// ISR para el boton de aumentar
+void IRAM_ATTR aumentar() {
+  unsigned long tiempo = millis();
+  if (tiempo - ultimaInterrupcion1 > rebote_ms) {
+    portENTER_CRITICAL_ISR(&mux); //desactivamos la ISR por un tiempo
+    contadorManual = (contadorManual + 1) % 16;
+    portEXIT_CRITICAL_ISR(&mux); //volvemos a activar la ISR
+    ultimaInterrupcion1 = tiempo;
+  }
+}
+
+// ISR para el boton de disminuir
+void IRAM_ATTR disminuir() {
+  unsigned long tiempo = millis();
+  if (tiempo - ultimaInterrupcion2 > rebote_ms) {
+    portENTER_CRITICAL_ISR(&mux); //desactivamos la ISR por un tiempo
+    contadorManual = (contadorManual - 1 + 16) % 16;
+    portEXIT_CRITICAL_ISR(&mux); //volvemos a activar la ISR
+    ultimaInterrupcion2 = tiempo;
+  }
+}
+
+// ISR para el timer de 250milisegundos
+void IRAM_ATTR onTimer() {
+  portENTER_CRITICAL_ISR(&mux); //desactivamos la ISR por un tiempo
+  contadorAuto = (contadorAuto + 1) % 16;
+  portEXIT_CRITICAL_ISR(&mux); //volvemos a activar la ISR
+}
+
+// apaga leds
+void apagarLEDs(int a, int b, int az, int r) {
+  digitalWrite(a, LOW);
+  digitalWrite(b, LOW);
+  digitalWrite(az, LOW);
+  digitalWrite(r, LOW);
+}
+
+// mostrar el numero
+void mostrarBinario(int numero, int a, int b, int az, int r) {
+  apagarLEDs(a, b, az, r);
+
+  switch (numero) {
+    case 0: break;
+    case 1: digitalWrite(a, HIGH); break;
+    case 2: digitalWrite(b, HIGH); break;
+    case 3: digitalWrite(a, HIGH); digitalWrite(b, HIGH); break;
+    case 4: digitalWrite(az, HIGH); break;
+    case 5: digitalWrite(a, HIGH); digitalWrite(az, HIGH); break;
+    case 6: digitalWrite(b, HIGH); digitalWrite(az, HIGH); break;
+    case 7: digitalWrite(a, HIGH); digitalWrite(b, HIGH); digitalWrite(az, HIGH); break;
+    case 8: digitalWrite(r, HIGH); break;
+    case 9: digitalWrite(a, HIGH); digitalWrite(r, HIGH); break;
+    case 10: digitalWrite(b, HIGH); digitalWrite(r, HIGH); break;
+    case 11: digitalWrite(a, HIGH); digitalWrite(b, HIGH); digitalWrite(r, HIGH); break;
+    case 12: digitalWrite(az, HIGH); digitalWrite(r, HIGH); break;
+    case 13: digitalWrite(a, HIGH); digitalWrite(az, HIGH); digitalWrite(r, HIGH); break;
+    case 14: digitalWrite(b, HIGH); digitalWrite(az, HIGH); digitalWrite(r, HIGH); break;
+    case 15: digitalWrite(a, HIGH); digitalWrite(b, HIGH); digitalWrite(az, HIGH); digitalWrite(r, HIGH); break;
+    default: break;
+  }
+}
+
+void setup() {
+  //leds del contador manual
+  pinMode(LED_a_m, OUTPUT);
+  pinMode(LED_b_m, OUTPUT);
+  pinMode(LED_az_m, OUTPUT);
+  pinMode(LED_r_m, OUTPUT);
+
+  // leds del contador automático
+  pinMode(LED_a_a, OUTPUT);
+  pinMode(LED_b_a, OUTPUT);
+  pinMode(LED_az_a, OUTPUT);
+  pinMode(LED_r_a, OUTPUT);
+
+  // LED de la alarma
+  pinMode(LED_alarma, OUTPUT);
+
+
+  pinMode(BTN1, INPUT);
+  pinMode(BTN2, INPUT);
+
+ //interrupciones activadas por flanco de bajada
+  attachInterrupt(BTN1, aumentar, FALLING); //porque la señal baja de HIGH a LOW
+  attachInterrupt(BTN2, disminuir, FALLING);
+
+  //tiempos para el timer
+  timer = timerBegin(0, 80, true);
+  timerAttachInterrupt(timer, &onTimer, true);
+  timerAlarmWrite(timer, 250000, true);
+  timerAlarmEnable(timer);
+}
+
+bool coincidenciaDetectada = false; // bandera para detectar solo una coincidencia porque se me trababa y cuando coincidia dejaba de avanzar
+
+
+
+void loop() {
+  int valorManual, valorAuto;
+
+  portENTER_CRITICAL(&mux);
+  valorManual = contadorManual;
+  valorAuto = contadorAuto;
+  portEXIT_CRITICAL(&mux);
+
+  mostrarBinario(valorManual, LED_a_m, LED_b_m, LED_az_m, LED_r_m);
+  mostrarBinario(valorAuto, LED_a_a, LED_b_a, LED_az_a, LED_r_a);
+
+  // compara si los contadores ya coinciden 
+  if (valorManual == valorAuto && !coincidenciaDetectada) {
+    estadoAlarma = !estadoAlarma;
+    digitalWrite(LED_alarma, estadoAlarma ? HIGH : LOW); 
+    coincidenciaDetectada = true; // ya se detecto
+  }
+
+  // si ya no coinciden, se resetea la bandera
+  if (valorManual != valorAuto) {
+    coincidenciaDetectada = false;
+  }
+
+  delay(10);
+}
+
